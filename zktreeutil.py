@@ -1,27 +1,27 @@
 #!/usr/bin/env python
 
-# NOTE: Requires Kazoo, SimpleJson be installed
-from optparse import OptionParser, OptionGroup
-import os
-import string
-import sys
 import logging
+import string
+from optparse import OptionGroup, OptionParser
+
 from kazoo.client import KazooClient
 
 try:
     import simplejson as json
-except:
+except Exception:
     import json
+
+MY_OVERRIDE = True
 
 
 class ZNode(object):
-    """A simple container for ZNode data
-	"""
+    """A simple container for ZNode data"""
 
-    def __init__(self, path, stat, data):
+    def __init__(self, path, stat, data, id=None):
         self.path = path
         self.stat = stat
         self.data = data
+        self.id = id
 
 
 class Action:
@@ -34,8 +34,8 @@ class Resolve:
 
 def parse_zk_string(zk_string):
     """Separate a ZK connect string (e.g. zookeeper.foo.com:2181/znode1/subnode1)
-	into the hostname:port and the ZK path.
-	"""
+    into the hostname:port and the ZK path.
+    """
     # idx = string.find(zk_string, '/')
     idx = zk_string.find("/")
     if idx == -1:
@@ -46,7 +46,7 @@ def parse_zk_string(zk_string):
 
 def init_logger(logger_id, log_level):
     """Initialize logging facility to specific logger ID and level.
-	"""
+    """
     logger = logging.getLogger(logger_id)
     logger.setLevel(log_level)
     ch = logging.StreamHandler()
@@ -61,27 +61,27 @@ def init_logger(logger_id, log_level):
 
 def get_opt_parse():
     usage = """
-	PRINT ZNODES: %prog --print [source_zookeeper]
-	Example:
-	  # Print all ZNodes under /path/to/target on zookeeper1
-	  %prog --print zookeeper1:2181/path/to/target
+    PRINT ZNODES: %prog --print [source_zookeeper]
+    Example:
+    # Print all ZNodes under /path/to/target on zookeeper1
+    %prog --print zookeeper1:2181/path/to/target
 
-	COPY ZNODES: %prog --copy [--no-clobber|--interactive|--overwrite] [source_zookeeper] [destination_zookeeper]
-	Example:
-	  # Copy ZNodes under /path/to/src on zookeeper1 into /path/to/dst on zookeeper2. Skip any ZNodes that already exist.
-	  %prog --copy --no-clobber zookeeper1:2181/path/to/src zookeeper2:2181/path/to/dst
+    COPY ZNODES: %prog --copy [--no-clobber|--interactive|--overwrite] [source_zookeeper] [destination_zookeeper]
+    Example:
+    # Copy ZNodes under /path/to/src on zookeeper1 into /path/to/dst on zookeeper2. Skip any ZNodes that already exist.
+    %prog --copy --no-clobber zookeeper1:2181/path/to/src zookeeper2:2181/path/to/dst
 
-	EXPORT ZNODES: %prog --export --file [target_file] [source_zookeeper]
-	Example:
-	  # Export ZNodes under /path/to/src on zookeeper as JSON into [target_file]
-	  %prog --export --file exported_znodes.json zookeeper1:2181/path/to/export
+    EXPORT ZNODES: %prog --export --file [target_file] [source_zookeeper]
+    Example:
+    # Export ZNodes under /path/to/src on zookeeper as JSON into [target_file]
+    %prog --export --file exported_znodes.json zookeeper1:2181/path/to/export
 
- 	IMPORT ZNODES: %prog --import [--no-clobber|--interactive|--overwrite] --file [target_file] [destination_zookeeper]
- 	Example:
-	  # Import ZNodes from imported_znodes.json and write them into zookeeper2 under /path/to/write/to
-	  # Overwrite any ZNodes that already exist in the path
-	  %prog --import --overwrite --file imported_znodes.json zookeeper2:2181/path/to/write/to
- 	"""
+    IMPORT ZNODES: %prog --import [--no-clobber|--interactive|--overwrite] --file [target_file] [destination_zookeeper]
+    Example:
+    # Import ZNodes from imported_znodes.json and write them into zookeeper2 under /path/to/write/to
+    # Overwrite any ZNodes that already exist in the path
+    %prog --import --overwrite --file imported_znodes.json zookeeper2:2181/path/to/write/to
+    """
     parser = OptionParser(usage=usage)
     action_group = OptionGroup(
         parser, "Action options: Specify what action to perform (Default: --print)"
@@ -171,8 +171,7 @@ def get_opt_parse():
 
 
 def join_paths(base_path, *relative_paths):
-    """Join Zookeeper paths by appending relative path(s) to the base path.
-	"""
+    """Join Zookeeper paths by appending relative path(s) to the base path."""
     rel_paths = [x.strip("/") for x in relative_paths]
     result_path = base_path.rstrip("/")
     for rel_path in rel_paths:
@@ -204,9 +203,9 @@ class ZkTreeUtil(object):
         self, src_zk_client, path, process_znode, **process_znode_kwargs
     ):
         """Recursively traverse the directory tree at the target Zookeeper ensemble using depth-first
-		search. When visiting each ZNode, call some function process_znode and accompanying args to
-		do something with that node (e.g. print it, copy it somewhere else, etc.)
-		"""
+        search. When visiting each ZNode, call some function process_znode and accompanying args to
+        do something with that node (e.g. print it, copy it somewhere else, etc.)
+        """
         self.logger.debug("Processing ZNode located at %s" % path)
         data, stat = src_zk_client.get(path)
         znode = ZNode(path, stat, data)
@@ -219,9 +218,26 @@ class ZkTreeUtil(object):
                 src_zk_client, child_path, process_znode, **process_znode_kwargs
             )
 
+    def my_zk_traversal(self, src_zk_client: KazooClient, path: str) -> dict:
+        global id
+        id += 1
+        my_id = id
+        data, _ = src_zk_client.get(path)
+        if not src_zk_client.get_children(path):  # object has no children
+            file = {"id": my_id, "text": path, "children": [], "data": data}
+            return file
+
+        result = {}
+        branches = []
+        for child in src_zk_client.get_children(path):
+            child_path = join_paths(path, child)
+            branches.append(self.my_zk_traversal(src_zk_client, child_path))
+        return {"id": my_id, "text": path, "children": branches, "data": data}
+
+        return result
+
     def process_znode_print(self, znode):
-        """Print the ZNode's path, data, and metadata to stdout.
-		"""
+        """Print the ZNode's path, data, and metadata to stdout."""
         print("ZNode path: %s" % znode.path)
         print("ZNode stat: %s" % str(znode.stat))
         if len(znode.data) == 0:
@@ -231,8 +247,8 @@ class ZkTreeUtil(object):
 
     def process_znode_write_to_zk(self, znode, dest_zk_client, dest_zk_path, resolve):
         """Copy the ZNode's data to the destination Zookeeper instance. All ZNodes are written
-		under the directory specified by dest_zk_path.
-		"""
+        under the directory specified by dest_zk_path.
+        """
         dest_znode_path = join_paths(dest_zk_path, znode.path)
 
         if dest_zk_client.exists(dest_znode_path):
@@ -273,7 +289,7 @@ class ZkTreeUtil(object):
 
     def run_copy(self, source_zk, source_zk_path, dest_zk, dest_zk_path, resolve):
         """Copy a ZNode and all children in the source Zookeeper to some path in the destination Zookeeper.
-		"""
+        """
         source_zk_client = create_zk_client(source_zk)
         dest_zk_client = create_zk_client(dest_zk)
         self.traverse_zk_tree(
@@ -287,7 +303,7 @@ class ZkTreeUtil(object):
 
     def run_import(self, source_file, dest_zk, dest_zk_path, resolve):
         """Read a Zookeeper's ZNode and all children and dump the path/data/metadata into a file as JSON.
-		"""
+        """
         f = open(source_file, "r")
         dest_zk_client = create_zk_client(dest_zk)
         znode_dict = json.loads(f.read())
@@ -298,17 +314,22 @@ class ZkTreeUtil(object):
 
     def run_export(self, source_zk, source_zk_path, dest_file):
         """Read a Zookeeper's ZNode and all children and dump the path/data/metadata into a file as JSON.
-		"""
+        """
         znode_dict = dict()
         source_zk_client = create_zk_client(source_zk)
-        self.traverse_zk_tree(
-            source_zk_client,
-            source_zk_path,
-            self.process_znode_write_dict,
-            znode_dict=znode_dict,
-        )
-        f = open(dest_file, "w")
-        f.write(json.dumps(znode_dict, sort_keys=True))
+        if MY_OVERRIDE:
+            d = self.my_zk_traversal(source_zk_client, source_zk_path)
+            with open(dest_file, "w") as f:
+                f.write(json.dumps(d, sort_keys=True))
+        else:
+            self.traverse_zk_tree(
+                source_zk_client,
+                source_zk_path,
+                self.process_znode_write_dict,
+                znode_dict=znode_dict,
+            )
+            f = open(dest_file, "w")
+            f.write(json.dumps(znode_dict, sort_keys=True))
 
     def run_print(self, source_zk, source_zk_path):
         source_zk_client = create_zk_client(source_zk)
@@ -351,4 +372,5 @@ def main():
 
 
 if __name__ == "__main__":
+    id = 0
     main()
