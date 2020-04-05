@@ -219,22 +219,21 @@ class ZkTreeUtil(object):
         id += 1
         my_id = id
         data, _ = src_zk_client.get(path)
+        if type(data) == bytes:
+            data = data.decode("utf-8")
+        data = data.replace("\n", "<br>")
+
         if not src_zk_client.get_children(path):  # object has no children
             filename = path.split("/")[-1]
-            if type(data) == bytes:
-                data = data.decode("utf-8")
             file = {"id": my_id, "text": filename, "children": [], "data": data}
             return file
 
-        result = {}
         branches = []
         for child in src_zk_client.get_children(path):
             child_path = join_paths(path, child)
             branches.append(self.my_zk_traversal(src_zk_client, child_path))
         filename = path.split("/")[-1]
         return {"id": my_id, "text": filename, "children": branches, "data": data}
-
-        return result
 
     def process_znode_print(self, znode):
         """Print the ZNode's path, data, and metadata to stdout."""
