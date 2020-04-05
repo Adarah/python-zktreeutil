@@ -221,6 +221,8 @@ class ZkTreeUtil(object):
         data, _ = src_zk_client.get(path)
         if not src_zk_client.get_children(path):  # object has no children
             filename = path.split("/")[-1]
+            if type(data) == bytes:
+                data = data.decode("utf-8")
             file = {"id": my_id, "text": filename, "children": [], "data": data}
             return file
 
@@ -318,7 +320,7 @@ class ZkTreeUtil(object):
         if MY_OVERRIDE:
             d = self.my_zk_traversal(source_zk_client, source_zk_path)
             with open(dest_file, "w") as f:
-                f.write(json.dumps(d, sort_keys=False))
+                f.write(json.dumps(d))
         else:
             self.traverse_zk_tree(
                 source_zk_client,
