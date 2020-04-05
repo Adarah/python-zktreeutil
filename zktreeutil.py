@@ -318,7 +318,7 @@ class ZkTreeUtil(object):
         if MY_OVERRIDE:
             d = self.my_zk_traversal(source_zk_client, source_zk_path)
             with open(dest_file, "w") as f:
-                f.write(json.dumps(d, sort_keys=True))
+                f.write(json.dumps(d, sort_keys=False))
         else:
             self.traverse_zk_tree(
                 source_zk_client,
