@@ -241,15 +241,16 @@ class ZkTreeUtil(object):
             child_path = join_paths(path, child)
             branches.append(self.my_zk_traversal(src_zk_client, child_path))
         filename = path.split("/")[-1]
-        if my_id == 1:
-            file['state'] = {'opened': True}
-        return {
+        file = {
             "id": my_id,
             "text": filename,
             "children": branches,
             "data": data,
             "icon": "far fa-folder",
         }
+        if my_id == 1:
+            file['state'] = {'opened': True}
+        return file
 
     def process_znode_print(self, znode):
         """Print the ZNode's path, data, and metadata to stdout."""
