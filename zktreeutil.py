@@ -224,7 +224,8 @@ class ZkTreeUtil(object):
             data = data.decode("utf-8")
         data = data.replace("\n", "<br>")
 
-        if not src_zk_client.get_children(path):  # object has no children
+        children = src_zk_client.get_children(path)
+        if not children:  # object has no children
             filename = path.split("/")[-1]
             file = {
                 "id": my_id,
@@ -236,18 +237,18 @@ class ZkTreeUtil(object):
             return file
 
         branches = []
-        for child in src_zk_client.get_children(path):
+        for child in children:
             child_path = join_paths(path, child)
             branches.append(self.my_zk_traversal(src_zk_client, child_path))
         filename = path.split("/")[-1]
         if my_id == 1:
-            file['state'] = {'opened': True, "selected": True}
+            file['state'] = {'opened': True}
         return {
             "id": my_id,
             "text": filename,
             "children": branches,
             "data": data,
-            "icon": "fas fa-folder",
+            "icon": "far fa-folder",
         }
 
     def process_znode_print(self, znode):
