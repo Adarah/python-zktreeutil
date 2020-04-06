@@ -2,10 +2,11 @@
 
 import logging
 import string
+import time
 from optparse import OptionGroup, OptionParser
 
-from kazoo.client import KazooClient
 import orjson as json
+from kazoo.client import KazooClient
 
 MY_OVERRIDE = True
 
@@ -249,7 +250,7 @@ class ZkTreeUtil(object):
             "icon": "far fa-folder",
         }
         if my_id == 1:
-            file['state'] = {'opened': True}
+            file["state"] = {"opened": True}
         return file
 
     def process_znode_print(self, znode):
@@ -334,9 +335,13 @@ class ZkTreeUtil(object):
         znode_dict = dict()
         source_zk_client = create_zk_client(source_zk)
         if MY_OVERRIDE:
+            tick = time.time()
             d = self.my_zk_traversal(source_zk_client, source_zk_path)
+            self.logge.info("Tree traversal finished in {time.time() - tick} seconds")
+            tick = time.time()
             with open(dest_file, "wb") as f:
                 f.write(json.dumps(d))
+            self.logger.info("JSON dumping finished in {time.time() - tick} seconds")
         else:
             self.traverse_zk_tree(
                 source_zk_client,
